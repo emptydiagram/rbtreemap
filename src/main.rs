@@ -50,36 +50,30 @@ where
 
     pub fn insert(&mut self, key: K, value: V) {
         // TODO: correctly handle when key is already present
-        unsafe {
-            let mut node: Option<NonNull<Node<K, V>>> = self.root.as_mut().map(|b: &mut Box<Node<K, V>> | NonNull::from(b.as_mut()));
-            let mut new_parent: Option<NonNull<Node<K, V>>> = None;
-            while !node.is_none() {
-                new_parent = node;
-                let mut node_ptr = node.unwrap();
-                if key < node_ptr.as_ref().key {
-                    node = node_ptr.as_mut().left.as_mut().map(|b| NonNull::from(b.as_mut()));
-                } else {
-                    node = node_ptr.as_mut().right.as_mut().map(|b| NonNull::from(b.as_mut()));
-                }
-            }
-            let z = Node { key, value, parent: new_parent, left: None, right: None, color: NodeColor::Red };
-            if let Some(mut new_parent_ptr) = new_parent {
-                if z.key < new_parent_ptr.as_ref().key {
-                    new_parent_ptr.as_mut().left = Some(Box::new(z));
-                } else {
-                    new_parent_ptr.as_mut().right = Some(Box::new(z));
-                }
+        let mut current = &mut self.root;
+        let mut parent: Option<*mut Node<K, V>> = None;
+        while let Some(node) = current {
+            parent = Some(&mut **node);
+            if key < node.key {
+                current = &mut node.left;
             } else {
-                self.root = Some(Box::new(z));
+                current = &mut node.right;
             }
         }
+
+        let parent_nn: Option<NonNull<Node<K, V>>> = parent.map(|n| unsafe { NonNull::new_unchecked(n) });
+        let z = Box::new(Node {
+            key, value, parent: parent_nn, left: None, right: None, color: NodeColor::Red
+        });
+
+        *current = Some(z);
         self.size += 1;
         // self.insert_fixup();
     }
 
 
     fn insert_fixup(&mut self) {
-        panic!("Not implemented");
+        self.root.as_mut().unwrap().color = NodeColor::Black;
     }
 
     fn rotate_left(&mut self, x_ptr: NonNull<Node<K, V>>) {
@@ -163,6 +157,7 @@ mod tests {
         assert_eq!(map.len(), 1);
     }
 
+    #[test]
     fn test_two_elements() {
         let mut map = RBTreeMap::new();
         map.insert(12, "abc");
