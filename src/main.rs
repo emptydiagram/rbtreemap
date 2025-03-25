@@ -1,6 +1,7 @@
 use std::ptr::NonNull;
 
 
+#[derive(PartialEq, Eq)]
 enum NodeColor {
     Red,
     Black
@@ -18,6 +19,17 @@ where
     color: NodeColor,
 }
 
+impl <K, V> Node<K, V>
+where K: Ord
+{
+    fn unwrap_parent(&self) -> &Node<K, V> {
+        match self.parent {
+            None => panic!("Parent is null"),
+            Some(p) => unsafe { p.as_ref() },
+        }
+    }
+}
+
 struct RBTreeMap<K, V>
 where
     K: Ord
@@ -25,6 +37,7 @@ where
     root: Option<Box<Node<K, V>>>,
     size: usize,
 }
+
 
 impl<K, V> RBTreeMap<K, V>
 where
@@ -48,31 +61,58 @@ where
         self.size = 0;
     }
 
+    fn is_black(maybe_node: &Option<NonNull<Node<K, V>>>) -> bool {
+        if let Some(node_ptr) = maybe_node {
+            return unsafe { node_ptr.as_ref()}.color == NodeColor::Black;
+        }
+        true
+    }
+
+    fn is_red(maybe_node: &Option<NonNull<Node<K, V>>>) -> bool {
+        !Self::is_black(maybe_node)
+    }
+
     pub fn insert(&mut self, key: K, value: V) {
         // TODO: correctly handle when key is already present
-        let mut current = &mut self.root;
-        let mut parent: Option<*mut Node<K, V>> = None;
-        while let Some(node) = current {
-            parent = Some(&mut **node);
-            if key < node.key {
-                current = &mut node.left;
-            } else {
-                current = &mut node.right;
+        let fixup_ptr: Option<NonNull<Node<K, V>>> = {
+            let mut current = &mut self.root;
+            let mut parent: Option<*mut Node<K, V>> = None;
+            while let Some(node) = current {
+                parent = Some(&mut **node);
+                if key < node.key {
+                    current = &mut node.left;
+                } else {
+                    current = &mut node.right;
+                }
             }
-        }
 
-        let parent_nn: Option<NonNull<Node<K, V>>> = parent.map(|n| unsafe { NonNull::new_unchecked(n) });
-        let z = Box::new(Node {
-            key, value, parent: parent_nn, left: None, right: None, color: NodeColor::Red
-        });
+            let parent_nn: Option<NonNull<Node<K, V>>> = parent.map(|n| unsafe { NonNull::new_unchecked(n) });
+            let z = Box::new(Node {
+                key, value, parent: parent_nn, left: None, right: None, color: NodeColor::Red
+            });
 
-        *current = Some(z);
-        self.size += 1;
-        // self.insert_fixup();
+            *current = Some(z);
+            self.size += 1;
+            current.as_mut().map(|b| unsafe { NonNull::new_unchecked(b.as_mut()) })
+        };
+        self.insert_fixup(fixup_ptr);
     }
 
 
-    fn insert_fixup(&mut self) {
+    fn insert_fixup(&mut self, z: Option<NonNull<Node<K, V>>>) {
+        // while parent exists and is red
+        let mut z_parent: Option<NonNull<Node<K, V>>>;
+        loop {
+            // z is not None, we can unwrap it.
+            z_parent = unsafe { z.unwrap().as_ref().parent };
+            if Self::is_black(&z_parent) { break; }
+            // since z_parent is red, that means its parent exists
+            if z_parent == z_paren.left {
+
+            } else {
+
+            }
+        }
         self.root.as_mut().unwrap().color = NodeColor::Black;
     }
 
