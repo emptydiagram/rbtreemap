@@ -9,8 +9,6 @@ enum NodeColor {
 }
 
 struct Node<K, V>
-where
-    K: Ord
 {
     key: K,
     value: V,
@@ -22,16 +20,15 @@ where
 
 impl<K, V> Debug for Node<K, V>
 where
-    K: Ord + Debug,
+    K: Debug,
     V: Debug
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Node {{ [{:?}] {:?} -> {:?}, l: {:?}, r: {:?}, p: {:?} }}", self.color, self.key, self.value, self.left, self.right, self.parent)
+        write!(f, "Node {{ [{:?}] {:?} -> {:?}, l: {:?}, r: {:?}", self.color, self.key, self.value, self.left, self.right)
     }
 }
 
 impl <K, V> Node<K, V>
-where K: Ord
 {
     #[inline]
     fn is_black(&self) -> bool {
@@ -56,6 +53,22 @@ where K: Ord
             Some(mut p_ptr) => unsafe { p_ptr.as_mut() },
         }
     }
+
+    fn leftmost_descendant(&self) -> &Node<K, V> {
+        let mut curr = self;
+        while let Some(ref next) = curr.left {
+            curr = next;
+        }
+        curr
+    }
+
+    fn rightmost_descendant(&self) -> &Node<K, V> {
+        let mut curr = self;
+        while let Some(ref next) = curr.right {
+            curr = next;
+        }
+        curr
+    }
 }
 
 struct RBTreeMap<K, V>
@@ -65,7 +78,6 @@ where
     root: Option<Box<Node<K, V>>>,
     size: usize,
 }
-
 
 impl<K, V> RBTreeMap<K, V>
 where
@@ -103,6 +115,21 @@ where
         }
         None
     }
+
+    pub fn first_key_value(&self) -> Option<(&K, &V)> {
+        self.root.as_ref().map(|r| {
+            let first = r.leftmost_descendant();
+            (&first.key, &first.value)
+        })
+    }
+
+    pub fn last_key_value(&self) -> Option<(&K, &V)> {
+        self.root.as_ref().map(|r| {
+            let first = r.rightmost_descendant();
+            (&first.key, &first.value)
+        })
+    }
+
 
     pub fn insert(&mut self, key: K, value: V) {
         let fixup_ptr: NonNull<Node<K, V>> = {
@@ -374,6 +401,54 @@ mod tests {
         map.insert(5, "d");
         map.insert(4, "e");
         assert_eq!(map.len(), 5);
+    }
+
+    #[test]
+    fn test_clrs_figure_13_4_insert() {
+        let mut map = RBTreeMap::new();
+        map.insert(11, "a");
+        map.insert(2, "b");
+        map.insert(14, "c");
+        map.insert(1, "d");
+        map.insert(15, "f");
+        map.insert(7, "e");
+        map.insert(5, "g");
+        map.insert(8, "h");
+        map.insert(4, "h");
+        assert_eq!(map.len(), 9);
+        assert_eq!(map.root.as_ref().unwrap().key, 7);
+    }
+
+    #[test]
+    fn test_first_key() {
+        let mut map = RBTreeMap::new();
+        assert!(map.first_key_value().is_none());
+        map.insert(5, "a");
+        map.insert(4, "b");
+        map.insert(3, "c");
+        map.insert(2, "d");
+        map.insert(1, "e");
+        let maybe_first = map.first_key_value();
+        assert!(maybe_first.is_some());
+        let first = maybe_first.unwrap();
+        assert_eq!(first.0, &1);
+        assert_eq!(first.1, &"e");
+    }
+
+    #[test]
+    fn test_last_key() {
+        let mut map = RBTreeMap::new();
+        assert!(map.last_key_value().is_none());
+        map.insert(5, "a");
+        map.insert(4, "b");
+        map.insert(3, "c");
+        map.insert(2, "d");
+        map.insert(1, "e");
+        let maybe_last = map.last_key_value();
+        assert!(maybe_last.is_some());
+        let last = maybe_last.unwrap();
+        assert_eq!(last.0, &5);
+        assert_eq!(last.1, &"a");
     }
 
 }
