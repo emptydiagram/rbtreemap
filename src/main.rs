@@ -26,7 +26,7 @@ where
     V: Debug
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Node {{ [{:?}] {:?} -> {:?}, l: {:?}, r: {:?} }}", self.color, self.key, self.value, self.left, self.right)
+        write!(f, "Node {{ [{:?}] {:?} -> {:?}, l: {:?}, r: {:?}, p: {:?} }}", self.color, self.key, self.value, self.left, self.right, self.parent)
     }
 }
 
@@ -91,7 +91,6 @@ where
     }
 
     pub fn insert(&mut self, key: K, value: V) {
-        // TODO: correctly handle when key is already present
         let fixup_ptr: NonNull<Node<K, V>> = {
             let mut current = &mut self.root;
             let mut parent: Option<*mut Node<K, V>> = None;
@@ -134,7 +133,7 @@ where
             let z_p: *mut Node<K, V> = z_node.unwrap_parent_mut();
 
             unsafe {
-                if (*z_p).is_black() { break; }
+                if (*z_p).is_black() || (*z_p).parent.is_none() { break; }
 
                 // if z.parent.parent is None, then z.parent is root, so z.parent is black
                 // so z.parent.parent is Some
@@ -150,6 +149,7 @@ where
                         (*z_p_p).color = NodeColor::Red;
                         z = (*z_p).parent.unwrap();
                     } else {
+                        // z.parent doesn't have a red sibling
                         if (*z_p).right.is_some() && std::ptr::eq(z.as_ref(), &**(*z_p).right.as_ref().unwrap()) {
                             z = z.as_ref().parent.unwrap();
                             self.rotate_left(z);
@@ -186,6 +186,7 @@ where
         unsafe {
             let x = x_ptr.as_ptr();
             let mut y = (*x).right.take().expect("Only call rotate_left on a node with a right child");
+            let y_ptr = unsafe { NonNull::new_unchecked(y.as_mut()) };
             (*x).right = y.left.take();
             if let Some(ref mut x_right) = (*x).right {
                 x_right.parent = Some(x_ptr);
@@ -195,17 +196,25 @@ where
 
             match (*x).parent {
                 None => {
+                    let x = self.root.take().unwrap();
                     self.root = Some(y);
+                    self.root.as_mut().unwrap().left = Some(x);
                 },
                 Some(x_parent_ptr) => {
                     let x_parent = &mut(*x_parent_ptr.as_ptr());
                     if x_parent.left.as_ref().map_or(false, |nbox| { std::ptr::eq(&**nbox, x) }) {
+                        let x = x_parent.left.take().unwrap();
                         x_parent.left = Some(y);
+                        x_parent.left.as_mut().unwrap().left = Some(x);
                     } else {
+                        let x = x_parent.right.take().unwrap();
                         x_parent.right = Some(y);
+                        x_parent.right.as_mut().unwrap().left = Some(x);
                     }
                 }
             }
+            (*x).parent = Some(y_ptr);
+
         }
     }
 
@@ -217,6 +226,7 @@ where
         unsafe {
             let x = x_ptr.as_ptr();
             let mut y = (*x).left.take().expect("Only call rotate_right on a node with a left child");
+            let y_ptr = unsafe { NonNull::new_unchecked(y.as_mut()) };
             (*x).left = y.right.take();
             if let Some(ref mut x_left) = (*x).left {
                 x_left.parent = Some(x_ptr);
@@ -226,19 +236,25 @@ where
 
             match (*x).parent {
                 None => {
+                    let x = self.root.take().unwrap();
                     self.root = Some(y);
+                    self.root.as_mut().unwrap().right = Some(x);
                 },
                 Some(x_parent_ptr) => {
                     // if x_parent.left is x, set left to y, else set right to y
                     let x_parent = &mut(*x_parent_ptr.as_ptr());
                     if x_parent.left.as_ref().map_or(false, |nbox| { std::ptr::eq(&**nbox, x) }) {
+                        let x = x_parent.left.take().unwrap();
                         x_parent.left = Some(y);
+                        x_parent.left.as_mut().unwrap().right = Some(x);
                     } else {
+                        let x = x_parent.right.take().unwrap();
                         x_parent.right = Some(y);
+                        x_parent.right.as_mut().unwrap().right = Some(x);
                     }
                 }
             }
-
+            (*x).parent = Some(y_ptr);
         }
     }
 
@@ -256,11 +272,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_singleton_len() {
+    fn test_singleton() {
         let mut map = RBTreeMap::new();
         assert_eq!(map.len(), 0);
         map.insert(12, "abc");
         assert_eq!(map.len(), 1);
+        assert!(map.get(&12).is_some());
+        assert_eq!(map.get(&12), Some(&"abc"));
     }
 
     #[test]
@@ -323,6 +341,28 @@ mod tests {
         map.insert(2, "b");
         map.insert(1, "c");
         assert_eq!(map.len(), 3);
+    }
+
+    #[test]
+    fn test_five_elements_1() {
+        let mut map = RBTreeMap::new();
+        map.insert(1, "a");
+        map.insert(2, "b");
+        map.insert(3, "c");
+        map.insert(4, "d");
+        map.insert(5, "e");
+        assert_eq!(map.len(), 5);
+    }
+
+    #[test]
+    fn test_five_elements_2() {
+        let mut map = RBTreeMap::new();
+        map.insert(3, "a");
+        map.insert(1, "b");
+        map.insert(2, "c");
+        map.insert(5, "d");
+        map.insert(4, "e");
+        assert_eq!(map.len(), 5);
     }
 
 }
