@@ -1,7 +1,8 @@
 use std::ptr::NonNull;
+use std::fmt::{self, Debug};
 
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
 enum NodeColor {
     Red,
     Black
@@ -19,13 +20,40 @@ where
     color: NodeColor,
 }
 
+impl<K, V> Debug for Node<K, V>
+where
+    K: Ord + Debug,
+    V: Debug
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Node {{ [{:?}] {:?} -> {:?}, l: {:?}, r: {:?} }}", self.color, self.key, self.value, self.left, self.right)
+    }
+}
+
 impl <K, V> Node<K, V>
 where K: Ord
 {
+    #[inline]
+    fn is_black(&self) -> bool {
+        self.color == NodeColor::Black
+    }
+
+    #[inline]
+    fn is_red(&self) -> bool {
+        self.color == NodeColor::Red
+    }
+
     fn unwrap_parent(&self) -> &Node<K, V> {
         match self.parent {
-            None => panic!("Parent is null"),
-            Some(p) => unsafe { p.as_ref() },
+            None => panic!("No parent"),
+            Some(p_ptr) => unsafe { p_ptr.as_ref() },
+        }
+    }
+
+    fn unwrap_parent_mut(&mut self) -> &mut Node<K, V> {
+        match self.parent {
+            None => panic!("No parent"),
+            Some(mut p_ptr) => unsafe { p_ptr.as_mut() },
         }
     }
 }
@@ -41,7 +69,8 @@ where
 
 impl<K, V> RBTreeMap<K, V>
 where
-    K: Ord
+    K: Ord + Debug,
+    V: Debug
 {
     pub fn new() -> Self {
         RBTreeMap { root: None, size: 0 }
@@ -61,20 +90,9 @@ where
         self.size = 0;
     }
 
-    fn is_black(maybe_node: &Option<NonNull<Node<K, V>>>) -> bool {
-        if let Some(node_ptr) = maybe_node {
-            return unsafe { node_ptr.as_ref()}.color == NodeColor::Black;
-        }
-        true
-    }
-
-    fn is_red(maybe_node: &Option<NonNull<Node<K, V>>>) -> bool {
-        !Self::is_black(maybe_node)
-    }
-
     pub fn insert(&mut self, key: K, value: V) {
         // TODO: correctly handle when key is already present
-        let fixup_ptr: Option<NonNull<Node<K, V>>> = {
+        let fixup_ptr: NonNull<Node<K, V>> = {
             let mut current = &mut self.root;
             let mut parent: Option<*mut Node<K, V>> = None;
             while let Some(node) = current {
@@ -93,24 +111,72 @@ where
 
             *current = Some(z);
             self.size += 1;
-            current.as_mut().map(|b| unsafe { NonNull::new_unchecked(b.as_mut()) })
+            current
+                .as_mut()
+                .map(|b| unsafe { NonNull::new_unchecked(b.as_mut()) })
+                .unwrap()
         };
         self.insert_fixup(fixup_ptr);
     }
 
 
-    fn insert_fixup(&mut self, z: Option<NonNull<Node<K, V>>>) {
-        // while parent exists and is red
-        let mut z_parent: Option<NonNull<Node<K, V>>>;
+    fn insert_fixup(&mut self, mut z: NonNull<Node<K, V>>) {
+        // invariants:
+        //  - z is red,
+        //  - if z.parent is root then it's black,
+        //  - if there's a violation, then (root is red) XOR (there is a red-red parent-child combo)
         loop {
-            // z is not None, we can unwrap it.
-            z_parent = unsafe { z.unwrap().as_ref().parent };
-            if Self::is_black(&z_parent) { break; }
-            // since z_parent is red, that means its parent exists
-            if z_parent == z_paren.left {
+            // if no parent, z is root. there are no other R-B tree violations, so exit the loop
+            let z_node = unsafe { z.as_mut() };
+            if z_node.parent.is_none() {
+                break;
+            }
+            let z_p: *mut Node<K, V> = z_node.unwrap_parent_mut();
 
-            } else {
+            unsafe {
+                if (*z_p).is_black() { break; }
 
+                // if z.parent.parent is None, then z.parent is root, so z.parent is black
+                // so z.parent.parent is Some
+                let z_p_p: *mut Node<K, V> = (*z_p).unwrap_parent_mut();
+
+                if (*z_p_p).left.is_some() && std::ptr::eq(z_p, (*z_p_p).left.as_ref().unwrap().as_ref()) {
+                    // z.parent is left child
+                    let maybe_z_p_p_r = (*z_p_p).right.as_mut();
+                    if maybe_z_p_p_r.is_some() && maybe_z_p_p_r.as_ref().unwrap().is_red() {
+                        let y = maybe_z_p_p_r.unwrap();
+                        (*z_p).color = NodeColor::Black;
+                        y.color = NodeColor::Black;
+                        (*z_p_p).color = NodeColor::Red;
+                        z = (*z_p).parent.unwrap();
+                    } else {
+                        if (*z_p).right.is_some() && std::ptr::eq(z.as_ref(), &**(*z_p).right.as_ref().unwrap()) {
+                            z = z.as_ref().parent.unwrap();
+                            self.rotate_left(z);
+                        }
+                        (*z_p).color = NodeColor::Black;
+                        (*z_p_p).color = NodeColor::Red;
+                        self.rotate_right(NonNull::new_unchecked(z_p_p));
+                    }
+                } else {
+                    // z.parent is right child
+                    let maybe_z_p_p_l = (*z_p_p).left.as_mut();
+                    if maybe_z_p_p_l.is_some() && maybe_z_p_p_l.as_ref().unwrap().is_red() {
+                        let y = maybe_z_p_p_l.unwrap();
+                        (*z_p).color = NodeColor::Black;
+                        y.color = NodeColor::Black;
+                        (*z_p_p).color = NodeColor::Red;
+                        z = (*z_p).parent.unwrap();
+                    } else {
+                        if (*z_p).left.is_some() && std::ptr::eq(z.as_ref(), &**(*z_p).left.as_ref().unwrap()) {
+                            z = z.as_ref().parent.unwrap();
+                            self.rotate_right(z);
+                        }
+                        (*z_p).color = NodeColor::Black;
+                        (*z_p_p).color = NodeColor::Red;
+                        self.rotate_left(NonNull::new_unchecked(z_p_p));
+                    }
+                }
             }
         }
         self.root.as_mut().unwrap().color = NodeColor::Black;
@@ -203,6 +269,60 @@ mod tests {
         map.insert(12, "abc");
         map.insert(34, "def");
         assert_eq!(map.len(), 2);
+    }
+
+    #[test]
+    fn test_three_elements_1() {
+        let mut map = RBTreeMap::new();
+        map.insert(1, "a");
+        map.insert(2, "b");
+        map.insert(3, "c");
+        assert_eq!(map.len(), 3);
+    }
+
+    #[test]
+    fn test_three_elements_2() {
+        let mut map = RBTreeMap::new();
+        map.insert(1, "a");
+        map.insert(3, "c");
+        map.insert(2, "b");
+        assert_eq!(map.len(), 3);
+    }
+
+    #[test]
+    fn test_three_elements_3() {
+        let mut map = RBTreeMap::new();
+        map.insert(2, "a");
+        map.insert(1, "b");
+        map.insert(3, "c");
+        assert_eq!(map.len(), 3);
+    }
+
+    #[test]
+    fn test_three_elements_4() {
+        let mut map = RBTreeMap::new();
+        map.insert(2, "a");
+        map.insert(3, "b");
+        map.insert(1, "c");
+        assert_eq!(map.len(), 3);
+    }
+
+    #[test]
+    fn test_three_elements_5() {
+        let mut map = RBTreeMap::new();
+        map.insert(3, "a");
+        map.insert(1, "b");
+        map.insert(2, "c");
+        assert_eq!(map.len(), 3);
+    }
+
+    #[test]
+    fn test_three_elements_6() {
+        let mut map = RBTreeMap::new();
+        map.insert(3, "a");
+        map.insert(2, "b");
+        map.insert(1, "c");
+        assert_eq!(map.len(), 3);
     }
 
 }
