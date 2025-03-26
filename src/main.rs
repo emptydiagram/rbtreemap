@@ -182,80 +182,75 @@ where
         self.root.as_mut().unwrap().color = NodeColor::Black;
     }
 
-    fn rotate_left(&mut self, x_ptr: NonNull<Node<K, V>>) {
-        unsafe {
-            let x = x_ptr.as_ptr();
-            let mut y = (*x).right.take().expect("Only call rotate_left on a node with a right child");
-            let y_ptr = unsafe { NonNull::new_unchecked(y.as_mut()) };
-            (*x).right = y.left.take();
-            if let Some(ref mut x_right) = (*x).right {
-                x_right.parent = Some(x_ptr);
-            }
+    fn rotate_left(&mut self, mut x_ptr: NonNull<Node<K, V>>) {
+        let x_ref = unsafe { x_ptr.as_mut() };
+        let mut y = x_ref.right.take().expect("Only call rotate_left on a node with a right child");
+        let y_ptr = unsafe { NonNull::new_unchecked(y.as_mut()) };
+        x_ref.right = y.left.take();
+        if let Some(ref mut x_right) = x_ref.right {
+            x_right.parent = Some(x_ptr);
+        }
 
-            y.parent = (*x).parent;
+        y.parent = x_ref.parent;
 
-            match (*x).parent {
-                None => {
-                    let x = self.root.take().unwrap();
-                    self.root = Some(y);
-                    self.root.as_mut().unwrap().left = Some(x);
-                },
-                Some(x_parent_ptr) => {
-                    let x_parent = &mut(*x_parent_ptr.as_ptr());
-                    if x_parent.left.as_ref().map_or(false, |nbox| { std::ptr::eq(&**nbox, x) }) {
-                        let x = x_parent.left.take().unwrap();
-                        x_parent.left = Some(y);
-                        x_parent.left.as_mut().unwrap().left = Some(x);
-                    } else {
-                        let x = x_parent.right.take().unwrap();
-                        x_parent.right = Some(y);
-                        x_parent.right.as_mut().unwrap().left = Some(x);
-                    }
+        match x_ref.parent {
+            None => {
+                let x = self.root.take().unwrap();
+                self.root = Some(y);
+                self.root.as_mut().unwrap().left = Some(x);
+            },
+            Some(mut x_parent_ptr) => {
+                let x_parent = unsafe { x_parent_ptr.as_mut() };
+                if x_parent.left.as_ref().map_or(false, |nbox| { std::ptr::eq(&**nbox, x_ref) }) {
+                    let x = x_parent.left.take().unwrap();
+                    x_parent.left = Some(y);
+                    x_parent.left.as_mut().unwrap().left = Some(x);
+                } else {
+                    let x = x_parent.right.take().unwrap();
+                    x_parent.right = Some(y);
+                    x_parent.right.as_mut().unwrap().left = Some(x);
                 }
             }
-            (*x).parent = Some(y_ptr);
-
         }
+        x_ref.parent = Some(y_ptr);
     }
 
     //   x      y
     //  /   =>   \
     // y          x
 
-    fn rotate_right(&mut self, x_ptr: NonNull<Node<K, V>>) {
-        unsafe {
-            let x = x_ptr.as_ptr();
-            let mut y = (*x).left.take().expect("Only call rotate_right on a node with a left child");
-            let y_ptr = unsafe { NonNull::new_unchecked(y.as_mut()) };
-            (*x).left = y.right.take();
-            if let Some(ref mut x_left) = (*x).left {
-                x_left.parent = Some(x_ptr);
-            }
+    fn rotate_right(&mut self, mut x_ptr: NonNull<Node<K, V>>) {
+        let x_ref = unsafe { x_ptr.as_mut() };
+        let mut y = x_ref.left.take().expect("Only call rotate_right on a node with a left child");
+        let y_ptr = unsafe { NonNull::new_unchecked(y.as_mut()) };
+        x_ref.left = y.right.take();
+        if let Some(ref mut x_left) = x_ref.left {
+            x_left.parent = Some(x_ptr);
+        }
 
-            y.parent = (*x).parent;
+        y.parent = x_ref.parent;
 
-            match (*x).parent {
-                None => {
-                    let x = self.root.take().unwrap();
-                    self.root = Some(y);
-                    self.root.as_mut().unwrap().right = Some(x);
-                },
-                Some(x_parent_ptr) => {
-                    // if x_parent.left is x, set left to y, else set right to y
-                    let x_parent = &mut(*x_parent_ptr.as_ptr());
-                    if x_parent.left.as_ref().map_or(false, |nbox| { std::ptr::eq(&**nbox, x) }) {
-                        let x = x_parent.left.take().unwrap();
-                        x_parent.left = Some(y);
-                        x_parent.left.as_mut().unwrap().right = Some(x);
-                    } else {
-                        let x = x_parent.right.take().unwrap();
-                        x_parent.right = Some(y);
-                        x_parent.right.as_mut().unwrap().right = Some(x);
-                    }
+        match x_ref.parent {
+            None => {
+                let x = self.root.take().unwrap();
+                self.root = Some(y);
+                self.root.as_mut().unwrap().right = Some(x);
+            },
+            Some(mut x_parent_ptr) => {
+                // if x_parent.left is x, set left to y, else set right to y
+                let x_parent = unsafe { x_parent_ptr.as_mut() };
+                if x_parent.left.as_ref().map_or(false, |nbox| { std::ptr::eq(&**nbox, x_ref) }) {
+                    let x = x_parent.left.take().unwrap();
+                    x_parent.left = Some(y);
+                    x_parent.left.as_mut().unwrap().right = Some(x);
+                } else {
+                    let x = x_parent.right.take().unwrap();
+                    x_parent.right = Some(y);
+                    x_parent.right.as_mut().unwrap().right = Some(x);
                 }
             }
-            (*x).parent = Some(y_ptr);
         }
+        x_ref.parent = Some(y_ptr);
     }
 
 }
