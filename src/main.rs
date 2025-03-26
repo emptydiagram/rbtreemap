@@ -90,6 +90,20 @@ where
         self.size = 0;
     }
 
+    pub fn get(&self, key: &K) -> Option<&V> {
+        let mut maybe_node = self.root.as_ref().map(|box_node| &*box_node);
+        while let Some(curr_node) = maybe_node {
+            if curr_node.key == *key {
+                return Some(&curr_node.value);
+            } else if *key < curr_node.key {
+                maybe_node = curr_node.left.as_ref();
+            } else {
+                maybe_node = curr_node.right.as_ref();
+            }
+        }
+        None
+    }
+
     pub fn insert(&mut self, key: K, value: V) {
         let fixup_ptr: NonNull<Node<K, V>> = {
             let mut current = &mut self.root;
@@ -282,6 +296,8 @@ mod tests {
         map.insert(12, "abc");
         map.insert(34, "def");
         assert_eq!(map.len(), 2);
+        assert_eq!(map.get(&12), Some(&"abc"));
+        assert_eq!(map.get(&34), Some(&"def"));
     }
 
     #[test]
