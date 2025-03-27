@@ -69,6 +69,18 @@ impl <K, V> Node<K, V>
         }
         curr
     }
+
+    fn first_right_strict_ancestor(&self) -> Option<&Node<K, V>> {
+        let mut curr = self;
+        while let Some(curr_parent) = curr.parent.map(|node_ptr| unsafe { node_ptr.as_ref() }) {
+            if curr_parent.left.is_some() && std::ptr::eq(&**curr_parent.left.as_ref().unwrap(), curr) {
+                return Some(curr_parent);
+            }
+            curr = curr_parent;
+        }
+        None
+
+    }
 }
 
 struct RBTreeMap<K, V>
@@ -78,6 +90,12 @@ where
     root: Option<Box<Node<K, V>>>,
     size: usize,
 }
+
+struct Iter<'a, K: Ord, V>
+{
+    curr: Option<&'a Node<K, V>>,
+}
+
 
 impl<K, V> RBTreeMap<K, V>
 where
@@ -294,12 +312,55 @@ where
         x_ref.parent = Some(y_ptr);
     }
 
+    fn iter<'a>(&'a self) -> Iter<'a, K, V> {
+        let mut prev: Option<&Box<Node<K, V>>> = None;
+        let mut curr = self.root.as_ref();
+        while let Some(node) = curr {
+            prev = curr;
+            curr = node.left.as_ref();
+        }
+        Iter {
+            curr: prev.map(|n| &**n),
+        }
+    }
+
 }
 
 
 
+impl<'a, K: Ord + Debug, V> Iterator for Iter<'a, K, V> {
+    type Item = (&'a K, &'a V);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let head = self.curr.take();
+        if let Some(node) = head {
+            // find the next node, if there is one, and add it to nodes
+            // two ways for next node:
+            //  - it's the leftmost descendant of the right child
+            //  - it's the first right ancestor
+            let maybe_rc_lm_desc = node.right.as_ref().map(|rc| rc.leftmost_descendant());
+            if let Some(rc_lm_desc) = maybe_rc_lm_desc {
+                self.curr = Some(rc_lm_desc);
+            } else {
+                if let Some(frs_anc) = node.first_right_strict_ancestor() {
+                    self.curr = Some(frs_anc);
+                }
+            }
+
+        }
+        head.map(|node| (&node.key, &node.value))
+    }
+}
+
 fn main() {
     println!("Hello, world!");
+    let mut map: RBTreeMap<i32, &str> = RBTreeMap::new();
+    map.insert(3, "a");
+    map.insert(2, "b");
+    map.insert(1, "c");
+    for (k, v) in map.iter() {
+        println!("{}: {}", k, v);
+    }
 }
 
 
@@ -449,6 +510,26 @@ mod tests {
         let last = maybe_last.unwrap();
         assert_eq!(last.0, &5);
         assert_eq!(last.1, &"a");
+    }
+
+    #[test]
+    fn test_iter_1() {
+        let mut map: RBTreeMap<i32, &str> = RBTreeMap::new();
+        let iter_vec: Vec<_> = map.iter().collect();
+        assert_eq!(iter_vec.len(), 0);
+        map.insert(3, "a");
+        map.insert(2, "b");
+        map.insert(1, "c");
+        let iter_vec: Vec<_> = map.iter().collect();
+        assert_eq!(iter_vec.len(), 3);
+        assert_eq!(iter_vec[0].0, &1);
+        assert_eq!(iter_vec[0].1, &"c");
+        assert_eq!(iter_vec[1].0, &2);
+        assert_eq!(iter_vec[1].1, &"b");
+        assert_eq!(iter_vec[2].0, &3);
+        assert_eq!(iter_vec[2].1, &"a");
+
+
     }
 
 }
