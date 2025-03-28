@@ -43,17 +43,10 @@ impl <K, V> Node<K, V>
         self.color == NodeColor::Red
     }
 
-    fn unwrap_parent(&self) -> &Node<K, V> {
+    fn unwrap_parent(&mut self) -> NonNull<Node<K, V>> {
         match self.parent {
             None => panic!("No parent"),
-            Some(p_ptr) => unsafe { p_ptr.as_ref() },
-        }
-    }
-
-    fn unwrap_parent_mut(&mut self) -> &mut Node<K, V> {
-        match self.parent {
-            None => panic!("No parent"),
-            Some(mut p_ptr) => unsafe { p_ptr.as_mut() },
+            Some(p_ptr) => p_ptr,
         }
     }
 
@@ -189,55 +182,52 @@ where
         loop {
             // if no parent, z is root. there are no other R-B tree violations, so exit the loop
             let z_node = unsafe { z.as_mut() };
+            let z_ref = unsafe { z.as_ref() };
             if z_node.parent.is_none() {
                 break;
             }
-            let z_p: *mut Node<K, V> = z_node.unwrap_parent_mut();
+            let z_p: &mut Node<K, V> = unsafe { z_node.unwrap_parent().as_mut() };
 
-            unsafe {
-                if (*z_p).is_black() || (*z_p).parent.is_none() { break; }
+            if z_p.is_black() || z_p.parent.is_none() { break; }
 
-                // if z.parent.parent is None, then z.parent is root, so z.parent is black
-                // so z.parent.parent is Some
-                let z_p_p: *mut Node<K, V> = (*z_p).unwrap_parent_mut();
+            let z_p_p: &mut Node<K, V> = unsafe { z_p.unwrap_parent().as_mut() };
 
-                if (*z_p_p).left.is_some() && std::ptr::eq(z_p, (*z_p_p).left.as_ref().unwrap().as_ref()) {
-                    // z.parent is left child
-                    let maybe_z_p_p_r = (*z_p_p).right.as_mut();
-                    if maybe_z_p_p_r.is_some() && maybe_z_p_p_r.as_ref().unwrap().is_red() {
-                        let y = maybe_z_p_p_r.unwrap();
-                        (*z_p).color = NodeColor::Black;
-                        y.color = NodeColor::Black;
-                        (*z_p_p).color = NodeColor::Red;
-                        z = (*z_p).parent.unwrap();
-                    } else {
-                        // z.parent doesn't have a red sibling
-                        if (*z_p).right.is_some() && std::ptr::eq(z.as_ref(), &**(*z_p).right.as_ref().unwrap()) {
-                            z = z.as_ref().parent.unwrap();
-                            self.rotate_left(z);
-                        }
-                        (*z_p).color = NodeColor::Black;
-                        (*z_p_p).color = NodeColor::Red;
-                        self.rotate_right(NonNull::new_unchecked(z_p_p));
-                    }
+            if z_p_p.left.is_some() && std::ptr::eq(z_p, z_p_p.left.as_ref().unwrap().as_ref()) {
+                // z.parent is left child
+                let maybe_z_p_p_r = z_p_p.right.as_mut();
+                if maybe_z_p_p_r.is_some() && maybe_z_p_p_r.as_ref().unwrap().is_red() {
+                    let y = maybe_z_p_p_r.unwrap();
+                    z_p.color = NodeColor::Black;
+                    y.color = NodeColor::Black;
+                    z_p_p.color = NodeColor::Red;
+                    z = z_p.parent.unwrap();
                 } else {
-                    // z.parent is right child
-                    let maybe_z_p_p_l = (*z_p_p).left.as_mut();
-                    if maybe_z_p_p_l.is_some() && maybe_z_p_p_l.as_ref().unwrap().is_red() {
-                        let y = maybe_z_p_p_l.unwrap();
-                        (*z_p).color = NodeColor::Black;
-                        y.color = NodeColor::Black;
-                        (*z_p_p).color = NodeColor::Red;
-                        z = (*z_p).parent.unwrap();
-                    } else {
-                        if (*z_p).left.is_some() && std::ptr::eq(z.as_ref(), &**(*z_p).left.as_ref().unwrap()) {
-                            z = z.as_ref().parent.unwrap();
-                            self.rotate_right(z);
-                        }
-                        (*z_p).color = NodeColor::Black;
-                        (*z_p_p).color = NodeColor::Red;
-                        self.rotate_left(NonNull::new_unchecked(z_p_p));
+                    // z.parent doesn't have a red sibling
+                    if z_p.right.is_some() && std::ptr::eq(z_ref, &**z_p.right.as_ref().unwrap()) {
+                        z = z_ref.parent.unwrap();
+                        self.rotate_left(z);
                     }
+                    z_p.color = NodeColor::Black;
+                    z_p_p.color = NodeColor::Red;
+                    self.rotate_right(unsafe { NonNull::new_unchecked(z_p_p) });
+                }
+            } else {
+                // z.parent is right child
+                let maybe_z_p_p_l = z_p_p.left.as_mut();
+                if maybe_z_p_p_l.is_some() && maybe_z_p_p_l.as_ref().unwrap().is_red() {
+                    let y = maybe_z_p_p_l.unwrap();
+                    z_p.color = NodeColor::Black;
+                    y.color = NodeColor::Black;
+                    z_p_p.color = NodeColor::Red;
+                    z = z_p.parent.unwrap();
+                } else {
+                    if z_p.left.is_some() && std::ptr::eq(z_ref, &**z_p.left.as_ref().unwrap()) {
+                        z = z_ref.parent.unwrap();
+                        self.rotate_right(z);
+                    }
+                    z_p.color = NodeColor::Black;
+                    z_p_p.color = NodeColor::Red;
+                    self.rotate_left(unsafe { NonNull::new_unchecked(z_p_p) });
                 }
             }
         }
