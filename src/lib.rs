@@ -5,7 +5,7 @@ use std::fmt::{self, Debug};
 mod tests;
 
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum NodeColor {
     Red,
     Black
@@ -75,7 +75,6 @@ impl <K, V> Node<K, V>
             curr = curr_parent;
         }
         None
-
     }
 }
 
