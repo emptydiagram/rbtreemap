@@ -316,6 +316,56 @@ where
         }
     }
 
+    pub fn remove(&mut self, key: &K) -> Option<V> {
+        let mut parent: Option<&mut Node<K, V>> = None;
+        let mut curr = &mut self.root;
+        let mut is_found = false;
+        while let Some(node) = curr {
+            if key == &node.key {
+                is_found = true;
+                break;
+            }
+            parent = Some(&mut **node);
+            if key < &node.key {
+                curr = &mut node.left;
+            } else {
+                curr = &mut node.right;
+            }
+        }
+        if !is_found || curr.is_none() {
+            return None;
+        }
+
+        // z == curr
+        panic!("Not implemented");
+    }
+
+    fn transplant<'a, 'b>(&'a mut self, u: &'b Node<K, V>, v: Option<Box<Node<K, V>>>) -> Option<&'a mut Node<K, V>> {
+        if u.parent.is_none() {
+            self.root = v;
+            if let Some(ref mut n) = self.root {
+                n.parent = None;
+            }
+            return self.root.as_mut().map(|n| &mut **n);
+        }
+        let u_p = u.parent.map(|mut nptr| unsafe { nptr.as_mut() }).unwrap();
+        if u_p.left.is_some() && std::ptr::eq(u, &**u_p.left.as_ref().unwrap()) {
+            u_p.left = v;
+            if let Some(ref mut n) = u_p.left {
+                n.parent = u.parent;
+            }
+            return u_p.left.as_mut().map(|n| &mut **n);
+        } else {
+            u_p.right = v;
+            if let Some(ref mut n) = u_p.right {
+                n.parent = u.parent;
+            }
+            return u_p.right.as_mut().map(|n| &mut **n);
+        }
+    }
+
+
+
 }
 
 
