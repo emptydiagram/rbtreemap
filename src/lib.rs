@@ -58,6 +58,7 @@ impl <K, V> Node<K, V>
         curr
     }
 
+
     fn rightmost_descendant(&self) -> &Node<K, V> {
         let mut curr = self;
         while let Some(ref next) = curr.right {
@@ -339,21 +340,48 @@ where
 
         unsafe {
             let z: *mut Node<K, V> = &mut **target.unwrap();
-            let y_orig_color = (*z).color;
+            let mut y_orig_color = (*z).color;
 
-            let removed: Option<Box<Node<K, V>>>;
+            let removed: Option<V>;
             // Transplant(u, v) is taking ownership of v, getting the parent of u, taking u out of u.parent and replacing it with v, and then returning v
             let source_ptr: Option<*mut Node<K, V>>;
             if (*z).left.is_none() {
                 let mut source = (*z).right.take();
                 source_ptr = source.as_mut().map(|n| &mut **n as *mut Node<K, V>);
-                removed = self.transplant(&*z, source);
+                let removed_node = self.transplant(&*z, source);
+                removed = removed_node.map(|n| n.value);
             } else if (*z).right.is_none() {
                 let mut source = (*z).left.take();
                 source_ptr = source.as_mut().map(|n| &mut **n as *mut Node<K, V>);
-                removed = self.transplant(&*z, source);
+                let removed_node = self.transplant(&*z, source);
+                removed = removed_node.map(|n| n.value);
                 // TODO
             } else {
+                let z_right = (*z).right.take();
+                let z_right_ref = z_right.as_mut().map(|n| &mut **n).unwrap();
+
+                // TODO: need to take ownership of the leftmost descendant of z.right
+                // let mut y = z_right_ref.take_leftmost_descendant();
+
+                // let mut curr = self;
+                // while let Some(ref next) = curr.left {
+                //     curr = next;
+                // }
+                // curr
+
+                y_orig_color = (*y).color;
+                let mut source = (*y).right.take();
+                if !std::ptr::eq(y, z_right_ref) {
+                    self.transplant(y, source);
+                    z_right_ref.parent = Some(NonNull::new_unchecked(y));
+                    (*y).right = z_right;
+                } else {
+                    if let Some(source_node) = source.as_mut() {
+                        source_node.parent = Some(NonNull::new_unchecked(y));
+                    }
+                }
+                let removed_node = self.transplant(&*z, y);
+                removed = removed_node.map(|n| n.value);
                 panic!("Not implemented");
             }
 
@@ -362,7 +390,8 @@ where
             if y_orig_color == NodeColor::Black {
                 self.delete_fixup(source_ptr);
             }
-            None
+            self.size -= 1;
+            removed
         }
     }
 
@@ -422,14 +451,30 @@ where
                             (*w_node).color = NodeColor::Red;
                             x = Some(x_parent_node);
                         } else {
-                            panic!("TODO")
+                            if (*w_node).right.is_none() || (*w_node).right.as_ref().unwrap().color == NodeColor::Black {
+                                if let Some(w_left) = (*w_node).left.as_mut() {
+                                    w_left.color = NodeColor::Black;
+                                }
+                                (*w_node).color = NodeColor::Red;
+                                self.rotate_right(NonNull::new_unchecked(w_node));
+                                w = x_parent_node.right.as_mut().map(|n| n.as_mut() as *mut Node<K, V>);
+                            }
+
+                            (*w_node).color = x_parent_node.color;
+                            (*x_parent_node).color = NodeColor::Black;
+                            if let Some(w_right) = (*w_node).right.as_mut() {
+                                w_right.color = NodeColor::Black;
+                            }
+                            self.rotate_left(NonNull::new_unchecked(x_parent_node));
+                            x = self.root.as_mut().map(|n| &mut **n as *mut Node<K, V>);
                         }
+                    } else {
+                        panic!("w is None");
                     }
                 } else {
                     // x is right child
-
+                    panic!("(fixup) right child not implemented");
                 }
-
             }
         }
         if let Some(x_node) = x {

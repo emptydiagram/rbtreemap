@@ -161,3 +161,57 @@ fn test_iter_1() {
     assert_eq!(iter_vec[2].0, &3);
     assert_eq!(iter_vec[2].1, &"a");
 }
+
+#[test]
+fn test_delete_empty() {
+    let mut map: RBTreeMap<i32, i32> = RBTreeMap::new();
+    let result = map.remove(&5);
+    assert!(result.is_none());
+}
+
+#[test]
+fn test_delete_singleton() {
+    let mut map: RBTreeMap<i32, i32> = RBTreeMap::new();
+    map.insert(1, 2);
+    let result = map.remove(&5);
+    assert!(result.is_none());
+    let result = map.remove(&1);
+    assert!(result.is_some());
+    assert_eq!(result.unwrap(), 2);
+}
+
+#[test]
+fn test_delete_3_left() {
+    let mut map: RBTreeMap<i32, &str> = RBTreeMap::new();
+    map.insert(1, "a");
+    map.insert(2, "b");
+    map.insert(3, "c");
+    let result = map.remove(&1);
+    assert!(result.is_some());
+    assert_eq!(result.unwrap(), "a");
+    assert_eq!(map.len(), 2);
+}
+
+#[test]
+fn test_delete_3_right() {
+    let mut map: RBTreeMap<i32, &str> = RBTreeMap::new();
+    map.insert(1, "a");
+    map.insert(2, "b");
+    map.insert(3, "c");
+    let result = map.remove(&3);
+    assert!(result.is_some());
+    assert_eq!(result.unwrap(), "c");
+    assert_eq!(map.len(), 2);
+}
+
+#[test]
+fn test_delete_3_root() {
+    let mut map: RBTreeMap<i32, &str> = RBTreeMap::new();
+    map.insert(1, "a");
+    map.insert(2, "b");
+    map.insert(3, "c");
+    let result = map.remove(&2);
+    assert!(result.is_some());
+    assert_eq!(result.unwrap(), "b");
+    assert_eq!(map.len(), 2);
+}
